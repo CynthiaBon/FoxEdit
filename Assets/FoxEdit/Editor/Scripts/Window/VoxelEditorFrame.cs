@@ -530,7 +530,6 @@ namespace FoxEdit
         internal void Destroy()
         {
             _grid.Clear();
-            GameObject.DestroyImmediate(VoxelTransform.gameObject);
         }
 
         #endregion Editing
