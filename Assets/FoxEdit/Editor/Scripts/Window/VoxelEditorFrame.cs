@@ -118,61 +118,72 @@ namespace FoxEdit
             return true;
         }
 
-        internal bool CanAddLayer(out List<Vector3Int> newVoxels, Vector3Int gridPosition, Vector3Int direction, int baseColorIndex = -1, HashSet<Vector3Int> verifiedVoxels = null)
+        internal bool TryAddLayer(Vector3Int gridPosition, Vector3Int direction, int paletteIndex, int colorIndex)
         {
-            newVoxels = new List<Vector3Int>();
-            if (verifiedVoxels == null)
-                verifiedVoxels = new HashSet<Vector3Int>();
-
-
             if (_grid.IsEmpty(gridPosition))
                 return false;
-            if (!verifiedVoxels.Add(gridPosition))
-                return false;
 
-            Vector3Int newGridPosition = gridPosition + direction;
+            int baseColorIndex = _grid[gridPosition].ColorIndex;
+            HashSet<Vector3Int> voxelsToAdd = new HashSet<Vector3Int>();
 
-            if (!_grid.IsEmpty(newGridPosition))
-                return false;
-
-            if (baseColorIndex == -1)
-                baseColorIndex = _grid[gridPosition].ColorIndex;
-            else if (_grid[gridPosition].ColorIndex != baseColorIndex)
-                return false;
-
-            newVoxels.Add(newGridPosition);
-            verifiedVoxels.Add(newGridPosition);
-
-            List<Vector3Int> tmpVoxelList = null;
-
-            Vector3Int tangent = new Vector3Int(direction.z, direction.x, direction.y);
-            if (CanAddLayer(out tmpVoxelList, gridPosition + tangent, direction, baseColorIndex, verifiedVoxels))
-                newVoxels.AddRange(tmpVoxelList);
-            if (CanAddLayer(out tmpVoxelList, gridPosition - tangent, direction, baseColorIndex, verifiedVoxels))
-                newVoxels.AddRange(tmpVoxelList);
-
-            Vector3Int bitangent = new Vector3Int(direction.y, direction.z, direction.x);
-            if (CanAddLayer(out tmpVoxelList, gridPosition + bitangent, direction, baseColorIndex, verifiedVoxels))
-                newVoxels.AddRange(tmpVoxelList);
-            if (CanAddLayer(out tmpVoxelList, gridPosition - bitangent, direction, baseColorIndex, verifiedVoxels))
-                newVoxels.AddRange(tmpVoxelList);
-
-            return true;
-        }
-
-        internal bool TryAddLayer(Vector3Int gridPosition, Vector3Int direction, int paletteIndex, int colorIndex, int baseColorIndex = -1)
-        {
-            if (CanAddLayer(out List<Vector3Int> newVoxelsPositions, gridPosition, direction, baseColorIndex))
+            if (AddLayer(ref voxelsToAdd, gridPosition, direction, baseColorIndex))
             {
-                foreach (Vector3Int newGridPosition in newVoxelsPositions)
+                foreach (Vector3Int newGridPosition in voxelsToAdd)
                 {
-                    _grid[newGridPosition] = CreateVoxelObject(newGridPosition);
-                    SetColor(newGridPosition, paletteIndex, colorIndex);
+                    Vector3Int newGridPositionOffset = newGridPosition + direction;
+                    if (_grid.IsEmpty(newGridPositionOffset))
+                    {
+                        _grid[newGridPositionOffset] = CreateVoxelObject(newGridPositionOffset);
+                        SetColor(newGridPositionOffset, paletteIndex, colorIndex);
+                    }
                 }
                 return true;
             }
 
             return false;
+        }
+
+        internal bool TryGetLayerToAdd(out List<Vector3Int> editedVoxels, Vector3Int gridPosition, Vector3Int direction)
+        {
+            editedVoxels = null;
+            if (_grid.IsEmpty(gridPosition))
+                return false;
+
+            int baseColorIndex = _grid[gridPosition].ColorIndex;
+            HashSet<Vector3Int> voxelsToAdd = new HashSet<Vector3Int>();
+
+            if (AddLayer(ref voxelsToAdd, gridPosition, direction, baseColorIndex))
+            {
+                editedVoxels = voxelsToAdd.ToList();
+                for (int i = 0; i < editedVoxels.Count; i++)
+                {
+                    editedVoxels[i] += direction;
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool AddLayer(ref HashSet<Vector3Int> voxelsToAdd, Vector3Int gridPosition, Vector3Int direction, int baseColorIndex)
+        {
+            Vector3Int newGridPosition = gridPosition + direction;
+
+            if (_grid.IsEmpty(gridPosition) ||
+                !_grid.IsEmpty(newGridPosition) ||
+                _grid[gridPosition].ColorIndex != baseColorIndex ||
+                !voxelsToAdd.Add(gridPosition))
+                return false;
+
+            Vector3Int tangent = new Vector3Int(direction.z, direction.x, direction.y);
+            AddLayer(ref voxelsToAdd, gridPosition + tangent, direction, baseColorIndex);
+            AddLayer(ref voxelsToAdd, gridPosition - tangent, direction, baseColorIndex);
+
+            Vector3Int bitangent = new Vector3Int(direction.y, direction.z, direction.x);
+            AddLayer(ref voxelsToAdd, gridPosition + bitangent, direction, baseColorIndex);
+            AddLayer(ref voxelsToAdd, gridPosition - bitangent, direction, baseColorIndex);
+
+            return true;
         }
 
         internal bool TryRemoveVoxel(Vector3Int gridPosition)
@@ -184,9 +195,15 @@ namespace FoxEdit
             return true;
         }
 
-        internal bool TryRemoveLayer(Vector3Int gridPosition, Vector3Int direction, int baseColorIndex = -1)
+        internal bool TryRemoveLayer(Vector3Int gridPosition, Vector3Int direction)
         {
-            if (CanRemoveLayer(out List<Vector3Int> voxelsToRemove, gridPosition, direction, baseColorIndex))
+            if (_grid.IsEmpty(gridPosition))
+                return false;
+
+            int colorIndex = _grid[gridPosition].ColorIndex;
+            HashSet<Vector3Int> voxelsToRemove = new HashSet<Vector3Int>();
+
+            if (RemoveLayer(ref voxelsToRemove, gridPosition, direction, colorIndex))
             {
                 foreach (Vector3Int voxelToRemove in voxelsToRemove)
                 {
@@ -197,40 +214,39 @@ namespace FoxEdit
             return false;
         }
 
-        internal bool CanRemoveLayer(out List<Vector3Int> removedVoxels, Vector3Int gridPosition, Vector3Int direction, int baseColorIndex = -1, HashSet<Vector3Int> verifiedVoxels = null)
+        internal bool TryGetLayerToRremove(out List<Vector3Int> editedVoxels, Vector3Int gridPosition, Vector3Int direction)
         {
-            removedVoxels = new List<Vector3Int>();
-            if (verifiedVoxels == null)
-                verifiedVoxels = new HashSet<Vector3Int>();
-
-            if (_grid.IsEmpty(gridPosition) || _grid.Count == 1)
+            editedVoxels = null;
+            if (_grid.IsEmpty(gridPosition))
                 return false;
 
-            if (!verifiedVoxels.Add(gridPosition))
+            int colorIndex = _grid[gridPosition].ColorIndex;
+            HashSet<Vector3Int> voxelsToRemove = new HashSet<Vector3Int>();
+            if (RemoveLayer(ref voxelsToRemove, gridPosition, direction, colorIndex))
+            {
+                editedVoxels = voxelsToRemove.ToList();
+                return true;
+            }
+            return false;
+        }
+
+        private bool RemoveLayer(ref HashSet<Vector3Int> voxelsToRemove, Vector3Int gridPosition, Vector3Int direction, int colorIndex)
+        {
+            if (_grid.IsEmpty(gridPosition) ||
+                voxelsToRemove.Count == _grid.Count - 1 ||
+                _grid[gridPosition].ColorIndex != colorIndex ||
+                !voxelsToRemove.Add(gridPosition))
                 return false;
-
-            if (baseColorIndex == -1)
-                baseColorIndex = _grid[gridPosition].ColorIndex;
-            else if (_grid[gridPosition].ColorIndex != baseColorIndex)
-                return false;
-
-            removedVoxels.Add(gridPosition);
-
-            List<Vector3Int> tmpVoxelList = null;
 
             Vector3Int tangent = new Vector3Int(direction.z, direction.x, direction.y);
-            if (CanRemoveLayer(out tmpVoxelList, gridPosition + tangent, direction, baseColorIndex, verifiedVoxels))
-                removedVoxels.AddRange(tmpVoxelList);
-            if (CanRemoveLayer(out tmpVoxelList, gridPosition - tangent, direction, baseColorIndex, verifiedVoxels))
-                removedVoxels.AddRange(tmpVoxelList);
+            RemoveLayer(ref voxelsToRemove, gridPosition + tangent, direction, colorIndex);
+            RemoveLayer(ref voxelsToRemove, gridPosition - tangent, direction, colorIndex);
 
             Vector3Int bitangent = new Vector3Int(direction.y, direction.z, direction.x);
-            if (CanRemoveLayer(out tmpVoxelList, gridPosition + bitangent, direction, baseColorIndex, verifiedVoxels))
-                removedVoxels.AddRange(tmpVoxelList);
-            if (CanRemoveLayer(out tmpVoxelList, gridPosition - bitangent, direction, baseColorIndex, verifiedVoxels))
-                removedVoxels.AddRange(tmpVoxelList);
+            RemoveLayer(ref voxelsToRemove, gridPosition + bitangent, direction, colorIndex);
+            RemoveLayer(ref voxelsToRemove, gridPosition - bitangent, direction, colorIndex);
 
-            return true;
+            return voxelsToRemove.Count != 0;
         }
 
         internal bool TryColorVoxel(Vector3Int gridPosition, int paletteIndex, int colorIndex)
@@ -242,49 +258,58 @@ namespace FoxEdit
             return true;
         }
 
-        internal bool TryFillColor(Vector3Int gridPosition, int paletteIndex, int colorIndex, int baseColorIndex = -1)
+        internal bool TryFillColor(Vector3Int gridPosition, int paletteIndex, int colorIndex)
         {
-            if (CanFillColor(out List<Vector3Int> modifiedVoxels, gridPosition, colorIndex, baseColorIndex))
+            if (_grid.IsEmpty(gridPosition))
+                return false;
+
+            int baseColorIndex = _grid[gridPosition].ColorIndex;
+            HashSet<Vector3Int> voxelsToColor = new HashSet<Vector3Int>();
+
+            if (FillColor(ref voxelsToColor, gridPosition, colorIndex, baseColorIndex))
             {
-                foreach (Vector3Int modifiedVoxel in modifiedVoxels)
-                    SetColor(modifiedVoxel, paletteIndex, colorIndex);
+                foreach (Vector3Int coloredVoxelPosition in voxelsToColor)
+                {
+                    SetColor(coloredVoxelPosition, paletteIndex, colorIndex);
+                }
                 return true;
             }
 
             return false;
         }
 
-        internal bool CanFillColor(out List<Vector3Int> modifiedVoxels, Vector3Int gridPosition, int colorIndex, int baseColorIndex = -1, HashSet<Vector3Int> verifiedVoxels = null)
+        internal bool TryGetAreaToColor(out List<Vector3Int> editedVoxels, Vector3Int gridPosition, int colorIndex)
         {
-            modifiedVoxels = new List<Vector3Int>();
-            if (verifiedVoxels == null)
-                verifiedVoxels = new HashSet<Vector3Int>();
-
-            if (_grid.IsEmpty(gridPosition) || _grid[gridPosition].ColorIndex == colorIndex)
-                return false;
-            if (!verifiedVoxels.Add(gridPosition))
+            editedVoxels = null;
+            if (_grid.IsEmpty(gridPosition))
                 return false;
 
-            if (baseColorIndex == -1)
-                baseColorIndex = _grid[gridPosition].ColorIndex;
-            else if (_grid[gridPosition].ColorIndex != baseColorIndex)
+            int baseColorIndex = _grid[gridPosition].ColorIndex;
+            HashSet<Vector3Int> voxelsToColor = new HashSet<Vector3Int>();
+
+            if (FillColor(ref voxelsToColor, gridPosition, colorIndex, baseColorIndex))
+            {
+                editedVoxels = voxelsToColor.ToList();
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool FillColor(ref HashSet<Vector3Int> voxelsToColor, Vector3Int gridPosition, int colorIndex, int baseColorIndex)
+        {
+            if (_grid.IsEmpty(gridPosition) ||
+                _grid[gridPosition].ColorIndex == colorIndex ||
+                _grid[gridPosition].ColorIndex != baseColorIndex ||
+                !voxelsToColor.Add(gridPosition))
                 return false;
 
-            modifiedVoxels.Add(gridPosition);
-            List<Vector3Int> tmpVoxelList = null;
-
-            if (CanFillColor(out tmpVoxelList, gridPosition + Vector3Int.up, colorIndex, baseColorIndex, verifiedVoxels))
-                modifiedVoxels.AddRange(tmpVoxelList);
-            if (CanFillColor(out tmpVoxelList, gridPosition + Vector3Int.down, colorIndex, baseColorIndex, verifiedVoxels))
-                modifiedVoxels.AddRange(tmpVoxelList);
-            if (CanFillColor(out tmpVoxelList, gridPosition + Vector3Int.left, colorIndex, baseColorIndex, verifiedVoxels))
-                modifiedVoxels.AddRange(tmpVoxelList);
-            if (CanFillColor(out tmpVoxelList, gridPosition + Vector3Int.right, colorIndex, baseColorIndex, verifiedVoxels))
-                modifiedVoxels.AddRange(tmpVoxelList);
-            if (CanFillColor(out tmpVoxelList, gridPosition + Vector3Int.forward, colorIndex, baseColorIndex, verifiedVoxels))
-                modifiedVoxels.AddRange(tmpVoxelList);
-            if (CanFillColor(out tmpVoxelList, gridPosition + Vector3Int.back, colorIndex, baseColorIndex, verifiedVoxels))
-                modifiedVoxels.AddRange(tmpVoxelList);
+            FillColor(ref voxelsToColor, gridPosition + Vector3Int.up, colorIndex, baseColorIndex);
+            FillColor(ref voxelsToColor, gridPosition + Vector3Int.down, colorIndex, baseColorIndex);
+            FillColor(ref voxelsToColor, gridPosition + Vector3Int.left, colorIndex, baseColorIndex);
+            FillColor(ref voxelsToColor, gridPosition + Vector3Int.right, colorIndex, baseColorIndex);
+            FillColor(ref voxelsToColor, gridPosition + Vector3Int.forward, colorIndex, baseColorIndex);
+            FillColor(ref voxelsToColor, gridPosition + Vector3Int.back, colorIndex, baseColorIndex);
 
             return true;
         }
