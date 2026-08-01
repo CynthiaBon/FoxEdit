@@ -140,10 +140,6 @@ namespace FoxEdit
                 EditorUtility.SetDirty(gameObject);
                 AssetDatabase.SaveAssets();
             }
-#else
-            if (_voxelObject.StaticMesh != null)
-                Refresh();
-#endif
         }
 
         public void RenderSwap()
@@ -196,20 +192,26 @@ namespace FoxEdit
             {
 #if UNITY_EDITOR
                 if (Application.isPlaying)
-                    SetColorBufferParam(colorsBuffer);
 #endif
+                    SetColorBufferParam(colorsBuffer);
 
-                if (_paletteIndexOverride == -1 && index != -1)
+                if (index == _voxelObject.PaletteIndex)
                 {
-                    CreateStaticMaterialInstances();
-                    _paletteIndexOverride = index;
-                }
-                else if (index == _voxelObject.PaletteIndex)
-                {
-                    _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticOpaqueMaterial, _voxelObject.StaticTransparentMaterial });
+                    if (_voxelObject.Animations[0].HasOpaqueFaces && _voxelObject.Animations[0].HasTransparentFaces)
+                        _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticOpaqueMaterial, _voxelObject.StaticTransparentMaterial });
+                    else if (_voxelObject.Animations[0].HasOpaqueFaces)
+                        _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticOpaqueMaterial });
+                    else if (_voxelObject.Animations[0].HasTransparentFaces)
+                        _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticTransparentMaterial });
+
                     _staticOpaqueMaterialInstance = null;
                     _staticTransparentMaterialInstance = null;
                     _paletteIndexOverride = -1;
+                }
+                else if (index != -1)
+                {
+                    CreateStaticMaterialInstances();
+                    _paletteIndexOverride = index;
                 }
             }
 
