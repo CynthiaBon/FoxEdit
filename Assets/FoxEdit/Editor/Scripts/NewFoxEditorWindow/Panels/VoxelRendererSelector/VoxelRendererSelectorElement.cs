@@ -117,14 +117,12 @@ namespace FoxEdit.WindowPanels
             OnSelectVoxelObject?.Invoke(voxelObject);
         }
 
-        private async void SetIcon(VoxelObject voxelRenderer, VisualElement visualElement)
+        private void SetIcon(VoxelObject voxelRenderer, VisualElement visualElement)
         {
-            Texture2D texture2D = await voxelRenderer.GetPreviewIcon();
+            Texture2D texture2D = voxelRenderer.GetPreviewIcon();
 
             if (texture2D != null)
                 visualElement.style.backgroundImage = texture2D;
         }
-
-
     }
 }

@@ -65,49 +65,33 @@ namespace FoxEdit
             SetWorldBounds();
         }
 
-        private void InitializeStaticRenderer()
+        internal void GetUsedComponents()
         {
             if (_meshFilter == null)
             {
-                GetUsedComponents();
-                _meshFilter.mesh = _voxelObject.StaticMesh;
-                _animator.runtimeAnimatorController = _voxelObject.AnimatorController;
+                _meshFilter = GetComponent<MeshFilter>();
+                _meshRenderer = GetComponent<MeshRenderer>();
+                _animator = GetComponent<Animator>();
             }
-
-            if (_paletteIndexOverride != _voxelObject.PaletteIndex)
-                CreateStaticMaterialInstances();
 
 #if UNITY_EDITOR
             if (!Application.isPlaying)
-            {
                 EditorUtility.SetDirty(gameObject);
-                AssetDatabase.SaveAssets();
-            }
 #endif
         }
 
-        internal void GetUsedComponents()
+        private void Initialize()
         {
-            _meshFilter = GetComponent<MeshFilter>();
-            _meshRenderer = GetComponent<MeshRenderer>();
-            _animator = GetComponent<Animator>();
-        }
+            GetUsedComponents();
 
-        internal void Initialize(bool setupForRender = false)
-        {
             if (_voxelObject == null)
                 return;
-
-            InitializeStaticRenderer();
 #if UNITY_EDITOR
-            if (Application.isPlaying || setupForRender)
-            {
+            if (Application.isPlaying)
 #endif
                 InitializeAnimatedRenderer();
-                Setup();
-#if UNITY_EDITOR
-            }
-#endif
+            Setup();
+            StaticRender();
         }
 
         void Awake()
@@ -129,9 +113,7 @@ namespace FoxEdit
             _frameIndex = 0;
 
             if (_voxelObject.StaticMesh != null)
-            {
                 Setup();
-            }
 
 #if UNITY_EDITOR
             if (!Application.isPlaying)
@@ -197,22 +179,16 @@ namespace FoxEdit
 
                 if (index == _voxelObject.PaletteIndex)
                 {
-                    if (_voxelObject.Animations[0].HasOpaqueFaces && _voxelObject.Animations[0].HasTransparentFaces)
-                        _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticOpaqueMaterial, _voxelObject.StaticTransparentMaterial });
-                    else if (_voxelObject.Animations[0].HasOpaqueFaces)
-                        _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticOpaqueMaterial });
-                    else if (_voxelObject.Animations[0].HasTransparentFaces)
-                        _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticTransparentMaterial });
-
                     _staticOpaqueMaterialInstance = null;
                     _staticTransparentMaterialInstance = null;
                     _paletteIndexOverride = -1;
                 }
                 else if (index != -1)
                 {
-                    CreateStaticMaterialInstances();
                     _paletteIndexOverride = index;
                 }
+
+                SetupMaterials();
             }
 
 #if UNITY_EDITOR
@@ -222,6 +198,24 @@ namespace FoxEdit
                 AssetDatabase.SaveAssets();
             }
 #endif
+        }
+
+        private void SetupMaterials()
+        {
+            if (_paletteIndexOverride != -1 && _paletteIndexOverride != _voxelObject.PaletteIndex)
+                CreateStaticMaterialInstances();
+            else
+                SetDefaultStaticMaterials();
+        }
+
+        private void SetDefaultStaticMaterials()
+        {
+            if (_voxelObject.Animations[0].HasOpaqueFaces && _voxelObject.Animations[0].HasTransparentFaces)
+                _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticOpaqueMaterial, _voxelObject.StaticTransparentMaterial });
+            else if (_voxelObject.Animations[0].HasOpaqueFaces)
+                _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticOpaqueMaterial });
+            else if (_voxelObject.Animations[0].HasTransparentFaces)
+                _meshRenderer.SetMaterials(new List<Material> { _voxelObject.StaticTransparentMaterial });
         }
 
         private void CreateStaticMaterialInstances()
@@ -254,8 +248,15 @@ namespace FoxEdit
         {
             if (_voxelObject == null)
                 return;
+#if UNITY_EDITOR
+            if (Application.isPlaying)
+#endif
+                _meshFilter.mesh = _voxelObject.StaticMesh;
+#if UNITY_EDITOR
+            else
+                _meshFilter.sharedMesh = _voxelObject.StaticMesh;
+#endif
 
-            _meshFilter.mesh = _voxelObject.StaticMesh;
             _animator.runtimeAnimatorController = _voxelObject.AnimatorController;
 #if UNITY_EDITOR
             _meshRenderer.enabled = _staticRender || !Application.isPlaying;
@@ -263,6 +264,7 @@ namespace FoxEdit
             _meshRenderer.enabled = _staticRender;
 #endif
             SetWorldBounds();
+            SetupMaterials();
 #if UNITY_EDITOR
             if (Application.isPlaying)
             {

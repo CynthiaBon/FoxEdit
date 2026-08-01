@@ -10,16 +10,11 @@ namespace FoxEdit
     public static class VoxelObjectExtentions
     {
 
-        public static async Task<Texture2D> GetPreviewIcon(this VoxelObject obj)
+        public static Texture2D GetPreviewIcon(this VoxelObject obj)
         {
             GameObject voxelRendererGO = new GameObject("Preview voxel");
             VoxelRenderer voxelRenderer = voxelRendererGO.AddComponent<VoxelRenderer>();
-            voxelRenderer.GetUsedComponents();
             voxelRenderer.SetVoxelObject(obj);
-            voxelRenderer.Initialize(true);
-            voxelRenderer.RenderSwap();
-
-            await Task.Delay(1000);
 
             Texture2D texture = ThumbnailsTaker.GetThumbnail(voxelRendererGO);
 
