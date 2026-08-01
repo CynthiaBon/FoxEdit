@@ -34,10 +34,20 @@ namespace FoxEdit
 
         private int _paletteIndex = -1;
 
-        internal VoxelPreview(VoxelEditorFrame frame, int paletteIndex)
+        private bool _drawEdges = true;
+        private List<Vector3> _edgeVertices = null;
+        private List<int> _edgeQuads = null;
+        private Color _edgeColor = Color.black;
+
+        internal VoxelPreview(VoxelEditorFrame frame, int paletteIndex, Color edgeColor, bool drawEdge = false)
         {
             _frameToPreview = frame;
             _paletteIndex = paletteIndex;
+
+            _edgeColor = edgeColor;
+            _drawEdges = drawEdge;
+            _edgeVertices = new List<Vector3>();
+            _edgeQuads = new List<int>();
 
             Initialize();
         }
@@ -91,7 +101,7 @@ namespace FoxEdit
             quads[1] = new List<int>(); //transparent
 
             bool[] isColorTransparent = VoxelSharedData.GetPalette(_paletteIndex).GetColorOpacities();
-            (int, int) instancesCount = VoxelSaveSystem.GreedyMeshing(_frameData, isColorTransparent, ref vertices, ref quads);
+            (int, int) instancesCount = VoxelSaveSystem.GreedyMeshing(_frameData, isColorTransparent, ref vertices, ref quads, false);
 
             _opaquePreview = new VoxelObject.MeshData
             {
@@ -110,6 +120,41 @@ namespace FoxEdit
                 Quads = quads[1].ToArray()
             };
             _hasTransparentFaces = instancesCount.Item2 != 0;
+
+            GreedyMeshingForEdges();
+
+        }
+
+        internal void SetDrawEdges(bool value)
+        {
+            if (value == _drawEdges)
+                return;
+
+            _drawEdges = value;
+            if (_drawEdges)
+                GreedyMeshingForEdges();
+        }
+
+        private void GreedyMeshingForEdges()
+        {
+            if (!_drawEdges)
+                return;
+
+            List<Vector3>[] vertices = new List<Vector3>[2];
+            vertices[0] = new List<Vector3>(); //opaque
+            vertices[1] = new List<Vector3>(); //transparent
+            List<int>[] quads = new List<int>[2];
+            quads[0] = new List<int>(); //opaque
+            quads[1] = new List<int>(); //transparent
+
+            (int, int) instancesCount = VoxelSaveSystem.GreedyMeshing(_frameData, new bool[1] { false }, ref vertices, ref quads, true);
+            _edgeVertices = vertices[0];
+            _edgeQuads = quads[0];
+        }
+
+        internal void SetEdgeColor(Color color)
+        {
+            _edgeColor = color;
         }
 
         private void SetRenderParams()
@@ -127,8 +172,14 @@ namespace FoxEdit
             _transparentRenderParams.matProps.SetBuffer("_VertexPositions", VoxelSharedData.FaceVertexBuffer);
         }
 
-        internal void RefreshColors()
+        internal void RefreshColors(bool refreshGreedyMeshing)
         {
+            if (refreshGreedyMeshing)
+            {
+                GreedyMeshing();
+                DisposeBuffers(OpacityType.Both);
+                SetVoxelBuffers();
+            }
             SetColorBuffer();
         }
 
@@ -246,6 +297,57 @@ namespace FoxEdit
                 Graphics.RenderPrimitivesIndexed(_opaqueRenderParams, MeshTopology.Triangles, VoxelSharedData.FaceTriangleBuffer, 6 /* 2 triangles */, instanceCount: _opaquePreview.InstanceCount[0]);
             if (_hasTransparentFaces)
                 Graphics.RenderPrimitivesIndexed(_transparentRenderParams, MeshTopology.Triangles, VoxelSharedData.FaceTriangleBuffer, 6 /* 2 triangles */, instanceCount: _transparentPreview.InstanceCount[0]);
+
+            if (_drawEdges)
+                DrawEdges();
+        }
+
+        private void DrawEdges()
+        {
+            Matrix4x4 localToWorld = _frameToPreview.VoxelTransform.localToWorldMatrix;
+
+            for (int i = 0; i < _edgeQuads.Count; i += 5)
+            {
+                Vector3 corner1 = localToWorld.MultiplyPoint(_edgeVertices[_edgeQuads[i]]);
+                Vector3 corner2 = localToWorld.MultiplyPoint(_edgeVertices[_edgeQuads[i + 3]]);
+                Vector3 distance = corner2 - corner1;
+
+                int xSign = (int)(1 * Mathf.Sign(distance.x));
+                int xLineCount = Mathf.RoundToInt(distance.x * 10.0f + xSign);
+                if (xLineCount != xSign)
+                {
+                    for (int x = 0; x != xLineCount; x += xSign)
+                    {
+                        Vector3 point1 = corner1 + new Vector3(x * 0.1f, 0, 0);
+                        Vector3 point2 = corner1 + new Vector3(x * 0.1f, distance.y, distance.z);
+                        Debug.DrawLine(point1, point2, _edgeColor, 0.01f, true);
+                    }
+                }
+
+                int ySign = (int)(1 * Mathf.Sign(distance.y));
+                int yLineCount = Mathf.RoundToInt(distance.y * 10.0f + ySign);
+                if (yLineCount != ySign)
+                {
+                    for (int y = 0; y != yLineCount; y += ySign)
+                    {
+                        Vector3 point1 = corner1 + new Vector3(0, y * 0.1f, 0);
+                        Vector3 point2 = corner1 + new Vector3(distance.x, y * 0.1f, distance.z);
+                        Debug.DrawLine(point1, point2, _edgeColor, 0.01f, true);
+                    }
+                }
+
+                int zSign = (int)(1 * Mathf.Sign(distance.z));
+                int zLineCount = Mathf.RoundToInt(distance.z * 10.0f + zSign);
+                if (zLineCount != zSign)
+                {
+                    for (int z = 0; z != zLineCount; z += zSign)
+                    {
+                        Vector3 point1 = corner1 + new Vector3(0, 0, z * 0.1f);
+                        Vector3 point2 = corner1 + new Vector3(distance.x, distance.y, z * 0.1f);
+                        Debug.DrawLine(point1, point2, _edgeColor, 0.01f, true);
+                    }
+                }
+            }
         }
     }
 }

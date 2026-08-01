@@ -1,6 +1,5 @@
 
 using System;
-using System.Diagnostics;
 using System.Linq;
 using FoxEdit.WindowComponents;
 using UnityEditor;
@@ -92,7 +91,7 @@ namespace FoxEdit.WindowPanels.VoxelObjectEditorPanelHandlers
         private void RefreshPreviewColors()
         {
             VoxelSharedData.RefreshColorBuffer(VoxelEditor.PaletteIndex);
-            _voxelEditor.RefreshPreviewColors();
+            _voxelEditor.RefreshPreviewColors(false);
             SceneView.RepaintAll();
         }
 
@@ -139,11 +138,14 @@ namespace FoxEdit.WindowPanels.VoxelObjectEditorPanelHandlers
 
         private void ApplyEditPaletteItem(int paletteItemIndex, VoxelColor newVoxelColor)
         {
+            int oldOpacity = (int)VoxelEditor.CurrentPalette.Colors[paletteItemIndex].Color.a;
+            bool hasColorChangedOpacityType = oldOpacity != (int)newVoxelColor.Color.a;
+
             _colorSelector.SetPaletteItemColor(paletteItemIndex, newVoxelColor);
             VoxelEditor.CurrentPalette.SetColor(paletteItemIndex, newVoxelColor);
             VoxelSharedData.RefreshColorBuffer(VoxelEditor.PaletteIndex);
             EditorUtility.SetDirty(VoxelEditor.CurrentPalette);
-            _voxelEditor.RefreshPreviewColors();
+            _voxelEditor.RefreshPreviewColors(hasColorChangedOpacityType);
         }
 
         private void OnChangeColor(int colorIndex)

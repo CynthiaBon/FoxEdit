@@ -82,17 +82,17 @@ namespace FoxEdit
             if (deletedPosition.x == _min.x)
                 _min.x = keys.Select(p => p.x).Min();
             else if (deletedPosition.x == _max.x)
-                _min.x = keys.Select(p => p.x).Max();
+                _max.x = keys.Select(p => p.x).Max();
 
             if (deletedPosition.y == _min.y)
                 _min.y = keys.Select(p => p.y).Min();
             else if (deletedPosition.y == _max.y)
-                _min.y = keys.Select(p => p.y).Max();
+                _max.y = keys.Select(p => p.y).Max();
 
             if (deletedPosition.z == _min.z)
                 _min.z = keys.Select(p => p.z).Min();
             else if (deletedPosition.z == _max.z)
-                _min.z = keys.Select(p => p.z).Max();
+                _max.z = keys.Select(p => p.z).Max();
         }
 
         internal void Clear()

@@ -143,8 +143,6 @@ namespace FoxEdit
 
         //Scene editor voxels
         private List<VoxelEditorAnimation> _animationList;
-        //No editor animated render anymore
-        //private bool wasVoxelRendererStatic = false;
 
         #region Init
 
@@ -152,7 +150,7 @@ namespace FoxEdit
         {
             _voxelRenderer = voxelRenderer;
             _animationList = new List<VoxelEditorAnimation>();
-            _preview = new VoxelPreview(CurrentFrame, _paletteIndex);
+            _preview = new VoxelPreview(CurrentFrame, _paletteIndex, Color.black);
             VoxelEditor.OnChangePalette += OnPaletteChanged;
             VoxelEditor.OnChangePalette += _preview.SetPaletteIndex;
             _voxelRenderer?.HideMesh();
@@ -359,9 +357,9 @@ namespace FoxEdit
             SceneView.RepaintAll();
         }
 
-        public void RefreshPreviewColors()
+        public void RefreshPreviewColors(bool refreshGreedyMeshing)
         {
-            _preview.RefreshColors();
+            _preview.RefreshColors(refreshGreedyMeshing);
         }
         #endregion
         #region Helpers

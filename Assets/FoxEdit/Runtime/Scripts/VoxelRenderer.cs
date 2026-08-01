@@ -110,7 +110,7 @@ namespace FoxEdit
 #endif
         }
 
-        void Start()
+        void Awake()
         {
             Initialize();
         }
@@ -128,18 +128,18 @@ namespace FoxEdit
             _animationIndex = 0;
             _frameIndex = 0;
 
-#if UNITY_EDITOR
-
-            if (Application.isPlaying && _voxelObject.StaticMesh != null)
+            if (_voxelObject.StaticMesh != null)
             {
                 Setup();
             }
 
+#if UNITY_EDITOR
             if (!Application.isPlaying)
             {
                 EditorUtility.SetDirty(gameObject);
                 AssetDatabase.SaveAssets();
             }
+#endif
         }
 
         public void RenderSwap()
@@ -149,12 +149,12 @@ namespace FoxEdit
 #if UNITY_EDITOR
             if (Application.isPlaying)
             {
+#endif
                 _meshRenderer.enabled = _staticRender;
                 if (_staticRender)
                     DisposeBuffers(OpacityType.Both);
                 else
                     SetVoxelBuffers();
-#endif
 #if UNITY_EDITOR
             }
 #endif

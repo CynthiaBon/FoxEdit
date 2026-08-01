@@ -131,7 +131,7 @@ namespace FoxEdit
 
                     startIndices[0].Add(animationQuads[0].Count() / 5);
                     startIndices[1].Add(animationQuads[1].Count() / 5);
-                    (int, int) newQuadsCount = GreedyMeshing(packedData, isColorTransparent, ref animationVertices, ref animationQuads);
+                    (int, int) newQuadsCount = GreedyMeshing(packedData, isColorTransparent, ref animationVertices, ref animationQuads, false);
                     instanceCounts[0].Add(newQuadsCount.Item1);
                     instanceCounts[1].Add(newQuadsCount.Item2);
 
@@ -238,7 +238,6 @@ namespace FoxEdit
                 animationEvent = new AnimationEvent();
                 animationEvent.functionName = "SetAnimation";
                 animationEvent.time = 0.0f;
-                AnimationUtility.SetAnimationEvents(clip, new AnimationEvent[] { animationEvent });
             }
             else
             {
@@ -246,6 +245,7 @@ namespace FoxEdit
             }
 
             animationEvent.intParameter = index;
+            AnimationUtility.SetAnimationEvents(clip, new AnimationEvent[] { animationEvent });
 
             EditorUtility.SetDirty(animator);
             EditorUtility.SetDirty(clip);
@@ -255,7 +255,7 @@ namespace FoxEdit
 
         #region GreedyMeshing
 
-        internal static (int, int) GreedyMeshing(VoxelObjectPackedFrameData data, bool[] isColorTransparent, ref List<Vector3>[] vertices, ref List<int>[] quads)
+        internal static (int, int) GreedyMeshing(VoxelObjectPackedFrameData data, bool[] isColorTransparent, ref List<Vector3>[] vertices, ref List<int>[] quads, bool ignoreColors)
         {
             Vector3Int size = data.MinBounds - data.MaxBounds;
             size.x = Mathf.Abs(size.x) + 1;
@@ -263,14 +263,14 @@ namespace FoxEdit
             size.z = Mathf.Abs(size.z) + 1;
             int[] colors = data.VoxelPositionToColor.Values.GroupBy(color => color).Select(group => group.Key).ToArray();
 
-            BitArray[][] binaryMasks = FillBinaryMasks(data, isColorTransparent, size);
-            Dictionary<int, BitArray[][][]>[] greedyPlanes = FillGreedyPlanes(data, binaryMasks, colors, size, data.MinBounds);
-            Dictionary<int, List<Rect>[][]>[] orderedQuads = Combine(greedyPlanes, colors);
+            BitArray[][] binaryMasks = FillBinaryMasks(data, isColorTransparent, size, ignoreColors);
+            Dictionary<int, BitArray[][][]>[] greedyPlanes = FillGreedyPlanes(data, binaryMasks, colors, size, data.MinBounds, ignoreColors);
+            Dictionary<int, List<Rect>[][]>[] orderedQuads = Combine(greedyPlanes, colors, ignoreColors);
 
             return CreateQuads(orderedQuads, size, data.MinBounds, ref vertices, ref quads);
         }
 
-        private static BitArray[][] FillBinaryMasks(VoxelObjectPackedFrameData data, bool[] isColorTransparent, Vector3Int size)
+        private static BitArray[][] FillBinaryMasks(VoxelObjectPackedFrameData data, bool[] isColorTransparent, Vector3Int size, bool ignoreColors)
         {
             BitArray[] opaqueSlices = new BitArray[3];
             BitArray[] opaqueAndTransparentSlices = new BitArray[3];
@@ -278,13 +278,13 @@ namespace FoxEdit
             BitArray opaqueSlice;
             BitArray opaqueAndTransparentSlice;
 
-            GetSlice(data, isColorTransparent, Vector3Int.right, size.x, Vector3Int.forward, size.z, Vector3Int.up, size.y, data.MinBounds, out opaqueSlice, out opaqueAndTransparentSlice);
+            GetSlice(data, isColorTransparent, Vector3Int.right, size.x, Vector3Int.forward, size.z, Vector3Int.up, size.y, data.MinBounds, out opaqueSlice, out opaqueAndTransparentSlice, ignoreColors);
             opaqueSlices[0] = opaqueSlice;
             opaqueAndTransparentSlices[0] = opaqueAndTransparentSlice;
-            GetSlice(data, isColorTransparent, Vector3Int.up, size.y, Vector3Int.right, size.x, Vector3Int.forward, size.z, data.MinBounds, out opaqueSlice, out opaqueAndTransparentSlice);
+            GetSlice(data, isColorTransparent, Vector3Int.up, size.y, Vector3Int.right, size.x, Vector3Int.forward, size.z, data.MinBounds, out opaqueSlice, out opaqueAndTransparentSlice, ignoreColors);
             opaqueSlices[1] = opaqueSlice;
             opaqueAndTransparentSlices[1] = opaqueAndTransparentSlice;
-            GetSlice(data, isColorTransparent, Vector3Int.forward, size.z, Vector3Int.right, size.x, Vector3Int.up, size.y, data.MinBounds, out opaqueSlice, out opaqueAndTransparentSlice);
+            GetSlice(data, isColorTransparent, Vector3Int.forward, size.z, Vector3Int.right, size.x, Vector3Int.up, size.y, data.MinBounds, out opaqueSlice, out opaqueAndTransparentSlice, ignoreColors);
             opaqueSlices[2] = opaqueSlice;
             opaqueAndTransparentSlices[2] = opaqueAndTransparentSlice;
 
@@ -292,22 +292,35 @@ namespace FoxEdit
             binaryMasks[0] = new BitArray[6]; //opaque
             binaryMasks[1] = new BitArray[6]; //transparent
 
-            for (int axis = 0; axis < 3; axis++)
+            if (ignoreColors)
             {
-                BitArray baseOpaqueSlice = opaqueSlices[axis];
-                BitArray baseOpaqueAndTransparentSlice = opaqueAndTransparentSlices[axis];
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    BitArray baseSlice = opaqueAndTransparentSlices[axis];
 
-                binaryMasks[0][axis * 2] = (baseOpaqueSlice.Clone() as BitArray).LeftShift(1).Not().And(baseOpaqueSlice);
-                binaryMasks[0][axis * 2 + 1] = (baseOpaqueSlice.Clone() as BitArray).RightShift(1).Not().And(baseOpaqueSlice);
+                    binaryMasks[0][axis * 2] = (baseSlice.Clone() as BitArray).LeftShift(1).Not().And(baseSlice);
+                    binaryMasks[0][axis * 2 + 1] = (baseSlice.Clone() as BitArray).RightShift(1).Not().And(baseSlice);
+                }
+            }
+            else
+            {
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    BitArray baseOpaqueSlice = opaqueSlices[axis];
+                    BitArray baseOpaqueAndTransparentSlice = opaqueAndTransparentSlices[axis];
 
-                binaryMasks[1][axis * 2] = (binaryMasks[0][axis * 2].Clone() as BitArray).Or((baseOpaqueAndTransparentSlice.Clone() as BitArray).LeftShift(1).Not().And(baseOpaqueAndTransparentSlice)).Xor(binaryMasks[0][axis * 2]);
-                binaryMasks[1][axis * 2 + 1] = (binaryMasks[0][axis * 2 + 1].Clone() as BitArray).Or((baseOpaqueAndTransparentSlice.Clone() as BitArray).RightShift(1).Not().And(baseOpaqueAndTransparentSlice)).Xor(binaryMasks[0][axis * 2 + 1]);
+                    binaryMasks[0][axis * 2] = (baseOpaqueSlice.Clone() as BitArray).LeftShift(1).Not().And(baseOpaqueSlice);
+                    binaryMasks[0][axis * 2 + 1] = (baseOpaqueSlice.Clone() as BitArray).RightShift(1).Not().And(baseOpaqueSlice);
+
+                    binaryMasks[1][axis * 2] = (binaryMasks[0][axis * 2].Clone() as BitArray).Or((baseOpaqueAndTransparentSlice.Clone() as BitArray).LeftShift(1).Not().And(baseOpaqueAndTransparentSlice)).Xor(binaryMasks[0][axis * 2]);
+                    binaryMasks[1][axis * 2 + 1] = (binaryMasks[0][axis * 2 + 1].Clone() as BitArray).Or((baseOpaqueAndTransparentSlice.Clone() as BitArray).RightShift(1).Not().And(baseOpaqueAndTransparentSlice)).Xor(binaryMasks[0][axis * 2 + 1]);
+                }
             }
 
             return binaryMasks;
         }
 
-        private static void GetSlice(VoxelObjectPackedFrameData data, bool[] isColorTransparent, Vector3Int sliceAxis, int axisSize, Vector3Int xAxis, int xSize, Vector3Int yAxis, int ySize, Vector3Int minBounds, out BitArray opaqueSlice, out BitArray opaqueAndTransparentSlice)
+        private static void GetSlice(VoxelObjectPackedFrameData data, bool[] isColorTransparent, Vector3Int sliceAxis, int axisSize, Vector3Int xAxis, int xSize, Vector3Int yAxis, int ySize, Vector3Int minBounds, out BitArray opaqueSlice, out BitArray opaqueAndTransparentSlice, bool ignoreColors)
         {
             int axisSizeWithPadding = axisSize + 1;
             int totalSize = xSize * ySize * axisSizeWithPadding;
@@ -328,18 +341,21 @@ namespace FoxEdit
                 int colorIndex;
                 if (data.VoxelPositionToColor.TryGetValue(position, out colorIndex))
                 {
-                    if (!isColorTransparent[colorIndex])
+                    if (!ignoreColors && !isColorTransparent[colorIndex])
                         opaqueSlice.Set(i, true);
                     opaqueAndTransparentSlice.Set(i, true);
                 }
             }
         }
 
-        private static Dictionary<int, BitArray[][][]>[] FillGreedyPlanes(VoxelObjectPackedFrameData data, BitArray[][] binaryMasks, int[] colors, Vector3Int size, Vector3Int minBounds)
+        private static Dictionary<int, BitArray[][][]>[] FillGreedyPlanes(VoxelObjectPackedFrameData data, BitArray[][] binaryMasks, int[] colors, Vector3Int size, Vector3Int minBounds, bool ignoreColors)
         {
             Dictionary<int, BitArray[][][]>[] greedyPlanes = new Dictionary<int, BitArray[][][]>[2];
             greedyPlanes[0] = new Dictionary<int, BitArray[][][]>(); //opaque
             greedyPlanes[1] = new Dictionary<int, BitArray[][][]>(); //transparent
+
+            if (ignoreColors)
+                colors = new int[1] { 0 };
 
             foreach (int color in colors)
             {
@@ -380,7 +396,7 @@ namespace FoxEdit
                     for (int i = 0; i < sliceSize; i++)
                     {
                         bool hasOpaqueFace = binaryMasks[0][axisIndex].Get(i * axisSize + sliceIndex + 1);
-                        bool hasTransparentFace = binaryMasks[1][axisIndex].Get(i * axisSize + sliceIndex + 1);
+                        bool hasTransparentFace = !ignoreColors && binaryMasks[1][axisIndex].Get(i * axisSize + sliceIndex + 1);
 
                         if (!hasOpaqueFace && !hasTransparentFace)
                             continue;
@@ -395,7 +411,9 @@ namespace FoxEdit
                         );
 
                         int colorIndex;
-                        if (data.VoxelPositionToColor.TryGetValue(voxelPosition + minBounds, out colorIndex))
+                        if (ignoreColors)
+                            greedyPlanes[0][0][axisIndex][sliceIndex][y].Set(x, true);
+                        else if (data.VoxelPositionToColor.TryGetValue(voxelPosition + minBounds, out colorIndex))
                             greedyPlanes[hasOpaqueFace ? 0 : 1][colorIndex][axisIndex][sliceIndex][y].Set(x, true);
                     }
                 }
@@ -404,11 +422,14 @@ namespace FoxEdit
             return greedyPlanes;
         }
 
-        private static Dictionary<int, List<Rect>[][]>[] Combine(Dictionary<int, BitArray[][][]>[] greedyPlanes, int[] colors)
+        private static Dictionary<int, List<Rect>[][]>[] Combine(Dictionary<int, BitArray[][][]>[] greedyPlanes, int[] colors, bool ignoreColors)
         {
             Dictionary<int, List<Rect>[][]>[] orderedQuads = new Dictionary<int, List<Rect>[][]>[2];
             orderedQuads[0] = new Dictionary<int, List<Rect>[][]>(); //opaque
             orderedQuads[1] = new Dictionary<int, List<Rect>[][]>(); //transparent
+
+            if (ignoreColors)
+                colors = new int[1] { 0 };
 
             foreach (var colorIndex in colors)
             {
@@ -723,7 +744,7 @@ namespace FoxEdit
             importer.importCameras = false;
             importer.importLights = false;
             importer.SaveAndReimport();
-            
+
             GameObject meshGameObject = AssetDatabase.LoadAssetAtPath(fbxPath, typeof(GameObject)) as GameObject;
             return meshGameObject.GetComponent<MeshFilter>().sharedMesh;
         }
